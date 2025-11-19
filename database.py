@@ -1,48 +1,25 @@
 import os
 import sqlite3
-import psycopg2
-from urllib.parse import urlparse
 import re
 from typing import List, Tuple, Any, Optional
 from datetime import datetime
 
 class Database:
-    def __init__(self):
-        self.conn = self.get_connection()
+    def __init__(self, db_file: str = 'data/processes.db'):
+        self.db_file = db_file
+        os.makedirs(os.path.dirname(db_file), exist_ok=True)
+        self.conn = sqlite3.connect(db_file)
         self.create_tables()
         self.populate_data()
     
-    def get_connection(self):
-        """Создает соединение с базой данных"""
-        # Пробуем PostgreSQL сначала (для Render.com)
-        database_url = os.environ.get('DATABASE_URL')
-        if database_url:
-            try:
-                conn = psycopg2.connect(database_url, sslmode='require')
-                print("✅ Connected to PostgreSQL")
-                return conn
-            except Exception as e:
-                print(f"❌ PostgreSQL connection failed: {e}")
-                print("🔄 Falling back to SQLite")
-        
-        # Fallback to SQLite (для локальной разработки)
-        try:
-            os.makedirs('data', exist_ok=True)
-            conn = sqlite3.connect('data/processes.db')
-            print("✅ Connected to SQLite")
-            return conn
-        except Exception as e:
-            print(f"❌ SQLite connection failed: {e}")
-            raise
-    
     def create_tables(self):
-        """Создает необходимые таблицы"""
+        """Создает необходимые таблицы в базе данных"""
         cursor = self.conn.cursor()
         
-        # Универсальный SQL который работает в обеих базах
+        # Создаем таблицу процессов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS processes (
-                id SERIAL PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 process_id TEXT UNIQUE NOT NULL,
                 process_name TEXT NOT NULL,
                 description TEXT,
@@ -50,9 +27,10 @@ class Database:
             )
         ''')
         
+        # Создаем таблицу предложений
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS suggestions (
-                id SERIAL PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 user_name TEXT NOT NULL,
                 username TEXT,
@@ -66,44 +44,48 @@ class Database:
         print("✅ Tables created successfully")
     
     def populate_data(self):
-        """Заполняет базу данных начальными данными"""
-        cursor = self.conn.cursor()
-        
-        # Проверяем, есть ли уже данные
-        cursor.execute('SELECT COUNT(*) FROM processes')
-        count = cursor.fetchone()[0]
-        
-        if count == 0:
-            # Заполняем данными из processes.json
+        """Заполняет базу данных данными из JSON файла"""
+        try:
             import json
-            try:
-                with open('data/processes.json', 'r', encoding='utf-8') as f:
-                    processes = json.load(f)
+            # Проверяем существование файла
+            json_path = 'data/processes.json'
+            
+            if not os.path.exists(json_path):
+                print(f"❌ Файл {json_path} не найден")
+                return
+            
+            # Загружаем данные из JSON
+            with open(json_path, 'r', encoding='utf-8') as f:
+                processes = json.load(f)
+            
+            cursor = self.conn.cursor()
+            
+            # Очищаем таблицу перед заполнением
+            cursor.execute('DELETE FROM processes')
+            
+            # Вставляем данные
+            for process in processes:
+                process_id = process.get('process_id', '')
+                process_name = process.get('process_name', '')
+                description = process.get('description', 'Описание отсутствует')
+                keywords = process.get('keywords', '')
                 
-                for process in processes:
-                    process_id = process.get('process_id', '')
-                    process_name = process.get('process_name', '')
-                    description = process.get('description', 'Описание отсутствует')
-                    keywords = process.get('keywords', '')
-                    
-                    # Проверяем, что описание не пустое
-                    if not description:
-                        description = 'Описание отсутствует'
-                    
-                    cursor.execute('''
-                        INSERT INTO processes (process_id, process_name, description, keywords)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (process_id) DO NOTHING
-                    ''', (process_id, process_name, description, keywords))
+                # Проверяем, что описание не пустое
+                if not description:
+                    description = 'Описание отсутствует'
                 
-                self.conn.commit()
-                print(f"✅ Database populated. Added {len(processes)} processes")
-            except Exception as e:
-                print(f"❌ Error populating database: {e}")
-        else:
-            print(f"✅ Database already has {count} processes")
-        
-        cursor.close()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO processes (process_id, process_name, description, keywords)
+                    VALUES (?, ?, ?, ?)
+                ''', (process_id, process_name, description, keywords))
+            
+            self.conn.commit()
+            cursor.close()
+            
+            print(f"✅ Database populated. Added {len(processes)} processes")
+            
+        except Exception as e:
+            print(f"❌ Error populating database: {e}")
 
     def _normalize_text(self, text: str) -> str:
         """Нормализует текст: заменяет ё на е и приводит к нижнему регистру"""
@@ -120,7 +102,7 @@ class Database:
         
         stems = [word]
         
-        # Основные правила для русского языка - улучшенная версия
+        # Основные правила для русского языка
         if len(word) > 4:
             # Убираем распространенные окончания прилагательных и существительных
             if (word.endswith('ой') or word.endswith('ый') or word.endswith('ий') or 
@@ -138,7 +120,7 @@ class Database:
                   word.endswith('ой') or word.endswith('ей')):
                 stems.append(word[:-2])
                 if len(word) > 5:
-                    stems.append(word[:-3])  # Для более длинных слов
+                    stems.append(word[:-3])
                     
             elif (word.endswith('у') or word.endswith('ю') or
                   word.endswith('а') or word.endswith('я') or
@@ -186,7 +168,7 @@ class Database:
         return list(set([stem for stem in stems if len(stem) >= 3]))
 
     def _calculate_relevance(self, process_data: Tuple, query_stems: List[str], original_query: str) -> int:
-        """Вычисляет релевантность процесса для запроса с улучшенной логикой"""
+        """Вычисляет релевантность процесса для запроса"""
         process_id, process_name, description, keywords = process_data
         
         # Нормализуем все текстовые поля процесса
@@ -238,24 +220,6 @@ class Database:
         if words_in_text == len(query_stems):
             relevance += 15
         
-        # 7. Особый бонус за процессы, которые точно соответствуют теме запроса
-        if "пуст" in norm_query and "упаков" in norm_query:
-            if process_id in ["B1.6", "B1.6.2"]:
-                relevance += 30
-        
-        # 8. Штраф за процессы, которые не относятся к теме
-        if "прием" in norm_query or "приём" in norm_query:
-            if process_id.startswith("B3"):  # Процессы выдачи заказов
-                relevance -= 25
-            if process_id.startswith("B1"):  # Процессы приема перевозок
-                relevance += 20
-        
-        if "выдача" in norm_query:
-            if process_id.startswith("B1"):  # Процессы приема перевозок
-                relevance -= 25
-            if process_id.startswith("B3"):  # Процессы выдачи заказов
-                relevance += 20
-        
         return relevance
 
     def search_processes(self, query: str) -> List[Tuple]:
@@ -285,7 +249,7 @@ class Database:
         results_with_relevance = []
         for process_data in all_processes:
             relevance = self._calculate_relevance(process_data, all_stems, query)
-            if relevance > 0:  # Показываем только процессы с положительной релевантностью
+            if relevance > 0:
                 results_with_relevance.append((process_data, relevance))
         
         # Сортируем по релевантности (по убыванию)
@@ -303,20 +267,16 @@ class Database:
     def get_all_processes(self) -> List[Tuple]:
         """Возвращает все процессы в формате (process_id, process_name)"""
         cursor = self.conn.cursor()
-        
         cursor.execute('SELECT process_id, process_name FROM processes ORDER BY process_id')
         processes = cursor.fetchall()
-        
         cursor.close()
         return processes
     
     def get_process_by_id(self, process_id: str) -> Optional[Tuple]:
         """Находит процесс по ID"""
         cursor = self.conn.cursor()
-        
-        cursor.execute('SELECT * FROM processes WHERE process_id = %s', (process_id,))
+        cursor.execute('SELECT * FROM processes WHERE process_id = ?', (process_id,))
         process = cursor.fetchone()
-        
         cursor.close()
         return process
     
@@ -324,16 +284,13 @@ class Database:
         """Сохраняет пожелание пользователя в базу данных"""
         try:
             cursor = self.conn.cursor()
-            
             cursor.execute('''
                 INSERT INTO suggestions (user_id, user_name, username, suggestion_text)
-                VALUES (%s, %s, %s, %s)
+                VALUES (?, ?, ?, ?)
             ''', (user_id, user_name, username, suggestion_text))
-            
             self.conn.commit()
             cursor.close()
             return True
-            
         except Exception as e:
             print(f"Ошибка при сохранении пожелания: {e}")
             return False
@@ -342,17 +299,14 @@ class Database:
         """Возвращает все пожелания из базы данных"""
         try:
             cursor = self.conn.cursor()
-            
             cursor.execute('''
                 SELECT id, user_id, user_name, username, suggestion_text, created_at 
                 FROM suggestions 
                 ORDER BY created_at DESC
             ''')
-            
             suggestions = cursor.fetchall()
             cursor.close()
             return suggestions
-            
         except Exception as e:
             print(f"Ошибка при получении пожеланий: {e}")
             return []
@@ -361,13 +315,10 @@ class Database:
         """Возвращает количество пожеланий в базе"""
         try:
             cursor = self.conn.cursor()
-            
             cursor.execute('SELECT COUNT(*) FROM suggestions')
             count = cursor.fetchone()[0]
-            
             cursor.close()
             return count
-            
         except Exception as e:
             print(f"Ошибка при подсчете пожеланий: {e}")
             return 0
@@ -376,18 +327,15 @@ class Database:
         """Возвращает последние пожелания"""
         try:
             cursor = self.conn.cursor()
-            
             cursor.execute('''
                 SELECT id, user_id, user_name, username, suggestion_text, created_at 
                 FROM suggestions 
                 ORDER BY created_at DESC 
-                LIMIT %s
+                LIMIT ?
             ''', (limit,))
-            
             suggestions = cursor.fetchall()
             cursor.close()
             return suggestions
-            
         except Exception as e:
             print(f"Ошибка при получении последних пожеланий: {e}")
             return []
