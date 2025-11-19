@@ -3,7 +3,7 @@ import os
 import sqlite3
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from config import BOT_TOKEN
 from database import db
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # ID администратора для уведомлений
 ADMIN_CHAT_ID = 324493714
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     user = update.effective_user
     
@@ -29,7 +29,7 @@ def start(update: Update, context: CallbackContext):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
         "Я бот-помощник по поиску бизнес-процессов Ozon.\n\n"
         "💡 <b>Что я умею:</b>\n"
@@ -42,7 +42,7 @@ def start(update: Update, context: CallbackContext):
         reply_markup=reply_markup
     )
 
-def help_command(update: Update, context: CallbackContext):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help"""
     keyboard = [
         [InlineKeyboardButton("🔍 Начать поиск процесса", callback_data="new_search")],
@@ -51,7 +51,7 @@ def help_command(update: Update, context: CallbackContext):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    update.message.reply_text(
+    await update.message.reply_text(
         "🔍 <b>Как пользоваться ботом:</b>\n\n"
         "<b>Поиск процессов:</b>\n"
         "• Напишите запрос из нескольких слов\n"
@@ -69,13 +69,13 @@ def help_command(update: Update, context: CallbackContext):
         reply_markup=reply_markup
     )
 
-def list_command(update: Update, context: CallbackContext):
+async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /list"""
     try:
         processes = db.get_all_processes()
         
         if not processes:
-            update.message.reply_text("❌ База процессов пуста.")
+            await update.message.reply_text("❌ База процессов пуста.")
             return
         
         text = "📋 <b>Полный список бизнес-процессов:</b>\n\n"
@@ -123,22 +123,22 @@ def list_command(update: Update, context: CallbackContext):
         if len(text) > 4096:
             parts = [text[i:i+4096] for i in range(0, len(text), 4096)]
             for part in parts:
-                update.message.reply_text(part, parse_mode='HTML')
+                await update.message.reply_text(part, parse_mode='HTML')
         else:
-            update.message.reply_text(text, parse_mode='HTML')
+            await update.message.reply_text(text, parse_mode='HTML')
             
     except Exception as e:
         logger.error(f"Ошибка в list_command: {e}")
-        update.message.reply_text("❌ Ошибка при получении списка процессов")
+        await update.message.reply_text("❌ Ошибка при получении списка процессов")
 
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений"""
     try:
         query = update.message.text.strip()
         logger.info(f"Поиск: '{query}'")
         
         if len(query) < 2:
-            update.message.reply_text("❌ Запрос слишком короткий. Введите хотя бы 2 символа.")
+            await update.message.reply_text("❌ Запрос слишком короткий. Введите хотя бы 2 символа.")
             return
         
         # Если запрос похож на код процесса
@@ -146,7 +146,7 @@ def handle_message(update: Update, context: CallbackContext):
         if any(clean_query.startswith(prefix) for prefix in ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']):
             process_data = db.get_process_by_id(clean_query)
             if process_data:
-                show_process_details(update, process_data)
+                await show_process_details(update, process_data)
                 return
         
         # Обычный поиск
@@ -154,7 +154,7 @@ def handle_message(update: Update, context: CallbackContext):
         logger.info(f"Найдено результатов: {len(results)}")
         
         if not results:
-            update.message.reply_text(
+            await update.message.reply_text(
                 f"❌ По запросу '<b>{query}</b>' ничего не найдено.\n\n"
                 "💡 <b>Попробуйте:</b>\n"
                 "• Более простой запрос\n"
@@ -165,13 +165,13 @@ def handle_message(update: Update, context: CallbackContext):
             return
         
         # Показываем пронумерованный список результатов
-        show_simple_results(update, query, results)
+        await show_simple_results(update, query, results)
             
     except Exception as e:
         logger.error(f"Ошибка в handle_message: {e}")
-        update.message.reply_text("❌ Произошла ошибка при поиске")
+        await update.message.reply_text("❌ Произошла ошибка при поиске")
 
-def show_simple_results(update: Update, query: str, results):
+async def show_simple_results(update: Update, query: str, results):
     """Показывает простой пронумерованный список найденных процессов"""
     try:
         text = f"🔍 <b>РЕЗУЛЬТАТЫ ПОИСКА</b>\n"
@@ -204,7 +204,7 @@ def show_simple_results(update: Update, query: str, results):
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
+        await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
         
     except Exception as e:
         logger.error(f"Ошибка в show_simple_results: {e}")
@@ -214,9 +214,9 @@ def show_simple_results(update: Update, query: str, results):
             if isinstance(result, (list, tuple)) and len(result) >= 2:
                 simple_text += f"{i}. {result[0]} - {result[1]}\n"
         
-        update.message.reply_text(simple_text, parse_mode='HTML')
+        await update.message.reply_text(simple_text, parse_mode='HTML')
 
-def show_process_details(update: Update, process_data):
+async def show_process_details(update: Update, process_data):
     """Показывает детальную информацию о процессе"""
     try:
         if isinstance(process_data, (list, tuple)) and len(process_data) >= 5:
@@ -246,26 +246,26 @@ def show_process_details(update: Update, process_data):
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            update.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
         else:
-            update.message.reply_text("❌ Неизвестный формат данных процесса")
+            await update.message.reply_text("❌ Неизвестный формат данных процесса")
             
     except Exception as e:
         logger.error(f"Ошибка в show_process_details: {e}")
-        update.message.reply_text("❌ Ошибка при отображении процесса")
+        await update.message.reply_text("❌ Ошибка при отображении процесса")
 
-def button_handler(update: Update, context: CallbackContext):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик нажатий на кнопки"""
     try:
         query = update.callback_query
-        query.answer()
+        await query.answer()
         
         data = query.data
         
         if data == "list_all":
-            list_command_callback(query)
+            await list_command_callback(query)
         elif data == "new_search":
-            query.message.reply_text(
+            await query.message.reply_text(
                 "🔍 <b>Введите запрос для поиска:</b>\n\n"
                 "<b>Примеры:</b>\n"
                 "• <code>прием перевозки</code>\n"
@@ -274,27 +274,27 @@ def button_handler(update: Update, context: CallbackContext):
                 parse_mode='HTML'
             )
         elif data == "help":
-            help_callback(query)
+            await help_callback(query)
         elif data == "send_suggestion":
-            suggestion_callback(query)
+            await suggestion_callback(query)
         elif data.startswith("show_"):
             process_id = data[5:]
             process_data = db.get_process_by_id(process_id)
             if process_data:
-                show_process_callback(query, process_data)
+                await show_process_callback(query, process_data)
             else:
-                query.message.reply_text(f"❌ Процесс {process_id} не найден.")
+                await query.message.reply_text(f"❌ Процесс {process_id} не найден.")
                 
     except Exception as e:
         logger.error(f"Ошибка в button_handler: {e}")
 
-def list_command_callback(query):
+async def list_command_callback(query):
     """Показывает список процессов в callback"""
     try:
         processes = db.get_all_processes()
         
         if not processes:
-            query.message.reply_text("❌ База процессов пуста.")
+            await query.message.reply_text("❌ База процессов пуста.")
             return
         
         # Создаем клавиатуру с кнопками процессов
@@ -321,13 +321,13 @@ def list_command_callback(query):
             "💡 <b>Для просмотра описания нажмите на процесс</b>"
         )
         
-        query.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
+        await query.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
         
     except Exception as e:
         logger.error(f"Ошибка в list_command_callback: {e}")
-        query.message.reply_text("❌ Ошибка при получении списка процессов")
+        await query.message.reply_text("❌ Ошибка при получении списка процессов")
 
-def show_process_callback(query, process_data):
+async def show_process_callback(query, process_data):
     """Показывает процесс в callback"""
     try:
         if isinstance(process_data, (list, tuple)) and len(process_data) >= 5:
@@ -355,13 +355,13 @@ def show_process_callback(query, process_data):
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            query.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
+            await query.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
             
     except Exception as e:
         logger.error(f"Ошибка в show_process_callback: {e}")
-        query.message.reply_text("❌ Ошибка при отображении процесса")
+        await query.message.reply_text("❌ Ошибка при отображении процесса")
 
-def help_callback(query):
+async def help_callback(query):
     """Показывает справку в callback"""
     keyboard = [
         [InlineKeyboardButton("🔍 Начать поиск", callback_data="new_search")],
@@ -381,11 +381,11 @@ def help_callback(query):
         "• <code>оформление недовоза</code>\n\n"
         "💡 Просто введите запрос для начала!"
     )
-    query.message.reply_text(help_text, parse_mode='HTML', reply_markup=reply_markup)
+    await query.message.reply_text(help_text, parse_mode='HTML', reply_markup=reply_markup)
 
-def suggestion_callback(query):
+async def suggestion_callback(query):
     """Обработчик кнопки отправки пожелания"""
-    query.message.reply_text(
+    await query.message.reply_text(
         "💡 <b>Отправьте Ваше предложение по улучшению</b>\n\n"
         "Опишите Вашу идею или замечание:\n"
         "• Работы бота\n"
@@ -398,18 +398,15 @@ def suggestion_callback(query):
 def main():
     """Запуск бота"""
     try:
-        # Создаем Updater
-        updater = Updater(BOT_TOKEN, use_context=True)
-        
-        # Получаем диспетчер для регистрации обработчиков
-        dp = updater.dispatcher
+        # Создаем Application
+        application = Application.builder().token(BOT_TOKEN).build()
         
         # Добавляем обработчики
-        dp.add_handler(CommandHandler("start", start))
-        dp.add_handler(CommandHandler("help", help_command))
-        dp.add_handler(CommandHandler("list", list_command))
-        dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-        dp.add_handler(CallbackQueryHandler(button_handler))
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("list", list_command))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(CallbackQueryHandler(button_handler))
         
         # Запускаем бота
         print("🤖 Бот запускается...")
@@ -417,8 +414,7 @@ def main():
         print("🔍 Поиск активен")
         print("💬 Бот готов к работе!")
         
-        updater.start_polling()
-        updater.idle()
+        application.run_polling()
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
