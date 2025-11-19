@@ -1,0 +1,18 @@
+{
+  "name": "Ozon Processes Bot",
+  "description": "Telegram bot for Ozon business processes",
+  "repository": "https://github.com/Alex-Ozon-Bot/ozon-bot-clean",
+  "keywords": ["python", "telegram", "bot", "ozon"],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Your Telegram Bot Token",
+      "value": "PLEASE_SET_IN_RENDER_DASHBOARD"
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "free"
+    }
+  }
+}
