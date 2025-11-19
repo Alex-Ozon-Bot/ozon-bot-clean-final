@@ -8,94 +8,69 @@ from datetime import datetime
 
 class Database:
     def __init__(self):
-        self.db_type = self.get_db_type()
         self.conn = self.get_connection()
         self.create_tables()
         self.populate_data()
     
-    def get_db_type(self):
-        """Определяет тип базы данных"""
-        if 'DATABASE_URL' in os.environ:
-            return 'postgres'
-        else:
-            return 'sqlite'
-    
     def get_connection(self):
         """Создает соединение с базой данных"""
-        if self.db_type == 'postgres':
-            return self.get_postgres_connection()
-        else:
-            return self.get_sqlite_connection()
-    
-    def get_postgres_connection(self):
-        """Создает соединение с PostgreSQL"""
+        # Пробуем PostgreSQL сначала (для Render.com)
         database_url = os.environ.get('DATABASE_URL')
-        conn = psycopg2.connect(database_url, sslmode='require')
-        return conn
-    
-    def get_sqlite_connection(self):
-        """Создает соединение с SQLite"""
-        os.makedirs('data', exist_ok=True)
-        return sqlite3.connect('data/processes.db')
+        if database_url:
+            try:
+                conn = psycopg2.connect(database_url, sslmode='require')
+                print("✅ Connected to PostgreSQL")
+                return conn
+            except Exception as e:
+                print(f"❌ PostgreSQL connection failed: {e}")
+                print("🔄 Falling back to SQLite")
+        
+        # Fallback to SQLite (для локальной разработки)
+        try:
+            os.makedirs('data', exist_ok=True)
+            conn = sqlite3.connect('data/processes.db')
+            print("✅ Connected to SQLite")
+            return conn
+        except Exception as e:
+            print(f"❌ SQLite connection failed: {e}")
+            raise
     
     def create_tables(self):
         """Создает необходимые таблицы"""
         cursor = self.conn.cursor()
         
-        if self.db_type == 'postgres':
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS processes (
-                    id SERIAL PRIMARY KEY,
-                    process_id TEXT UNIQUE NOT NULL,
-                    process_name TEXT NOT NULL,
-                    description TEXT,
-                    keywords TEXT
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS suggestions (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    user_name TEXT NOT NULL,
-                    username TEXT,
-                    suggestion_text TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-        else:
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS processes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    process_id TEXT UNIQUE NOT NULL,
-                    process_name TEXT NOT NULL,
-                    description TEXT,
-                    keywords TEXT
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS suggestions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    user_name TEXT NOT NULL,
-                    username TEXT,
-                    suggestion_text TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+        # Универсальный SQL который работает в обеих базах
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS processes (
+                id SERIAL PRIMARY KEY,
+                process_id TEXT UNIQUE NOT NULL,
+                process_name TEXT NOT NULL,
+                description TEXT,
+                keywords TEXT
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                user_name TEXT NOT NULL,
+                username TEXT,
+                suggestion_text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         self.conn.commit()
         cursor.close()
+        print("✅ Tables created successfully")
     
     def populate_data(self):
         """Заполняет базу данных начальными данными"""
         cursor = self.conn.cursor()
         
         # Проверяем, есть ли уже данные
-        if self.db_type == 'postgres':
-            cursor.execute('SELECT COUNT(*) FROM processes')
-        else:
-            cursor.execute('SELECT COUNT(*) FROM processes')
-        
+        cursor.execute('SELECT COUNT(*) FROM processes')
         count = cursor.fetchone()[0]
         
         if count == 0:
@@ -108,35 +83,34 @@ class Database:
                 for process in processes:
                     process_id = process.get('process_id', '')
                     process_name = process.get('process_name', '')
-                    description = process.get('description', '')
+                    description = process.get('description', 'Описание отсутствует')
                     keywords = process.get('keywords', '')
                     
-                    if self.db_type == 'postgres':
-                        cursor.execute('''
-                            INSERT INTO processes (process_id, process_name, description, keywords)
-                            VALUES (%s, %s, %s, %s)
-                            ON CONFLICT (process_id) DO NOTHING
-                        ''', (process_id, process_name, description, keywords))
-                    else:
-                        cursor.execute('''
-                            INSERT OR IGNORE INTO processes (process_id, process_name, description, keywords)
-                            VALUES (?, ?, ?, ?)
-                        ''', (process_id, process_name, description, keywords))
+                    # Проверяем, что описание не пустое
+                    if not description:
+                        description = 'Описание отсутствует'
+                    
+                    cursor.execute('''
+                        INSERT INTO processes (process_id, process_name, description, keywords)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (process_id) DO NOTHING
+                    ''', (process_id, process_name, description, keywords))
                 
                 self.conn.commit()
-                print(f"✅ База данных заполнена. Добавлено {len(processes)} процессов")
+                print(f"✅ Database populated. Added {len(processes)} processes")
             except Exception as e:
-                print(f"❌ Ошибка при заполнении базы: {e}")
+                print(f"❌ Error populating database: {e}")
+        else:
+            print(f"✅ Database already has {count} processes")
         
         cursor.close()
 
-    # Остальные методы остаются без изменений
     def _normalize_text(self, text: str) -> str:
         """Нормализует текст: заменяет ё на е и приводит к нижнему регистру"""
         if not text:
             return ""
         return text.lower().replace('ё', 'е')
-
+    
     def _get_word_stems(self, word: str) -> List[str]:
         """Возвращает возможные основы слова для поиска с учетом нормализации е/ё"""
         word = self._normalize_text(word.strip())
@@ -264,6 +238,24 @@ class Database:
         if words_in_text == len(query_stems):
             relevance += 15
         
+        # 7. Особый бонус за процессы, которые точно соответствуют теме запроса
+        if "пуст" in norm_query and "упаков" in norm_query:
+            if process_id in ["B1.6", "B1.6.2"]:
+                relevance += 30
+        
+        # 8. Штраф за процессы, которые не относятся к теме
+        if "прием" in norm_query or "приём" in norm_query:
+            if process_id.startswith("B3"):  # Процессы выдачи заказов
+                relevance -= 25
+            if process_id.startswith("B1"):  # Процессы приема перевозок
+                relevance += 20
+        
+        if "выдача" in norm_query:
+            if process_id.startswith("B1"):  # Процессы приема перевозок
+                relevance -= 25
+            if process_id.startswith("B3"):  # Процессы выдачи заказов
+                relevance += 20
+        
         return relevance
 
     def search_processes(self, query: str) -> List[Tuple]:
@@ -311,19 +303,20 @@ class Database:
     def get_all_processes(self) -> List[Tuple]:
         """Возвращает все процессы в формате (process_id, process_name)"""
         cursor = self.conn.cursor()
+        
         cursor.execute('SELECT process_id, process_name FROM processes ORDER BY process_id')
         processes = cursor.fetchall()
+        
         cursor.close()
         return processes
     
     def get_process_by_id(self, process_id: str) -> Optional[Tuple]:
         """Находит процесс по ID"""
         cursor = self.conn.cursor()
-        if self.db_type == 'postgres':
-            cursor.execute('SELECT * FROM processes WHERE process_id = %s', (process_id,))
-        else:
-            cursor.execute('SELECT * FROM processes WHERE process_id = ?', (process_id,))
+        
+        cursor.execute('SELECT * FROM processes WHERE process_id = %s', (process_id,))
         process = cursor.fetchone()
+        
         cursor.close()
         return process
     
@@ -331,16 +324,11 @@ class Database:
         """Сохраняет пожелание пользователя в базу данных"""
         try:
             cursor = self.conn.cursor()
-            if self.db_type == 'postgres':
-                cursor.execute('''
-                    INSERT INTO suggestions (user_id, user_name, username, suggestion_text)
-                    VALUES (%s, %s, %s, %s)
-                ''', (user_id, user_name, username, suggestion_text))
-            else:
-                cursor.execute('''
-                    INSERT INTO suggestions (user_id, user_name, username, suggestion_text)
-                    VALUES (?, ?, ?, ?)
-                ''', (user_id, user_name, username, suggestion_text))
+            
+            cursor.execute('''
+                INSERT INTO suggestions (user_id, user_name, username, suggestion_text)
+                VALUES (%s, %s, %s, %s)
+            ''', (user_id, user_name, username, suggestion_text))
             
             self.conn.commit()
             cursor.close()
@@ -349,6 +337,60 @@ class Database:
         except Exception as e:
             print(f"Ошибка при сохранении пожелания: {e}")
             return False
+    
+    def get_all_suggestions(self) -> List[Tuple]:
+        """Возвращает все пожелания из базы данных"""
+        try:
+            cursor = self.conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, user_id, user_name, username, suggestion_text, created_at 
+                FROM suggestions 
+                ORDER BY created_at DESC
+            ''')
+            
+            suggestions = cursor.fetchall()
+            cursor.close()
+            return suggestions
+            
+        except Exception as e:
+            print(f"Ошибка при получении пожеланий: {e}")
+            return []
+    
+    def get_suggestions_count(self) -> int:
+        """Возвращает количество пожеланий в базе"""
+        try:
+            cursor = self.conn.cursor()
+            
+            cursor.execute('SELECT COUNT(*) FROM suggestions')
+            count = cursor.fetchone()[0]
+            
+            cursor.close()
+            return count
+            
+        except Exception as e:
+            print(f"Ошибка при подсчете пожеланий: {e}")
+            return 0
+    
+    def get_recent_suggestions(self, limit: int = 10) -> List[Tuple]:
+        """Возвращает последние пожелания"""
+        try:
+            cursor = self.conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, user_id, user_name, username, suggestion_text, created_at 
+                FROM suggestions 
+                ORDER BY created_at DESC 
+                LIMIT %s
+            ''', (limit,))
+            
+            suggestions = cursor.fetchall()
+            cursor.close()
+            return suggestions
+            
+        except Exception as e:
+            print(f"Ошибка при получении последних пожеланий: {e}")
+            return []
 
 # Создаем глобальный экземпляр базы данных
 db = Database()
