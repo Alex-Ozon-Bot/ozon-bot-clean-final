@@ -1155,8 +1155,13 @@ def main():
             # Даем время health server запуститься
             time.sleep(2)
             
-            # Создаем Application
-            application = Application.builder().token(BOT_TOKEN).build()
+            # Создаем Application с явным указанием бот-инстанса
+            application = (
+                Application.builder()
+                .token(BOT_TOKEN)
+                .concurrent_updates(True)  # Разрешаем параллельные обновления
+                .build()
+            )
             print("✅ Application создано")
             
             # Добавляем обработчики
@@ -1175,25 +1180,28 @@ def main():
             print("✅ Обработчики добавлены")
             print("🤖 Бот запускается...")
             
-            # Запускаем бота
+            # Запускаем бота с принудительным завершением предыдущих сессий
             application.run_polling(
                 allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,
-                poll_interval=3,
-                timeout=20
+                drop_pending_updates=True,  # Игнорируем старые сообщения
+                close_loop=False,  # Не закрываем цикл при ошибке
+                stop_signals=[],   # Отключаем обработку сигналов остановки
             )
             
         except telegram.error.Conflict as e:
             print(f"❌ Конфликт: {e}")
+            print("🔄 Принудительное завершение предыдущей сессии...")
+            
+            # Ждем подольше при конфликте
             retry_count += 1
-            wait_time = 10 * retry_count
+            wait_time = 30 * retry_count
             print(f"🔄 Перезапуск через {wait_time} секунд...")
             time.sleep(wait_time)
             
         except Exception as e:
             print(f"❌ Ошибка запуска бота: {e}")
             retry_count += 1
-            wait_time = 30 * retry_count
+            wait_time = 20 * retry_count
             print(f"🔄 Перезапуск через {wait_time} секунд...")
             time.sleep(wait_time)
     
