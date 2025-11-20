@@ -24,7 +24,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Создаем клавиатуру с кнопками
     keyboard = [
         [InlineKeyboardButton("🔍 Найти нужный процесс", callback_data="new_search")],
-	[InlineKeyboardButton("📋 Список всех процессов", callback_data="list_all")],
+        [InlineKeyboardButton("📋 Список всех процессов", callback_data="list_all")],
         [InlineKeyboardButton("📄 Скачать все процессы в PDF", callback_data="get_pdf")],
         [InlineKeyboardButton("📚 Скачать Руководство по чтению процессов в нотации BPMN", callback_data="get_guide")],
         [InlineKeyboardButton("🎥 Смотреть обучающий ролик по BPMN", callback_data="bpmn_video")],
@@ -40,7 +40,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💡 <b>Что я умею:</b>\n"
         "• 🔍 Искать процессы по ключевым словам\n"
         "• 📄 Отправлять PDF со всеми бизнес-процессами\n"
-	"• 📋 Показывать полный список всех процессов\n"
+        "• 📋 Показывать полный список всех процессов\n"
         "• 📚 Обучать чтению BPMN-схем\n"
         "• 🎥 Показывать обучающее видео по BPMN\n"
         "• 🧪 Проверять знания по BPMN\n"
@@ -350,9 +350,12 @@ async def send_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         disable_web_page_preview=True
     )
 
-async def send_pdf_callback(query, context):
+async def send_pdf_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка PDF в callback"""
     try:
+        query = update.callback_query
+        await query.answer()
+        
         chat_id = query.message.chat_id
         
         # Создаем клавиатуру с кнопками
@@ -370,7 +373,7 @@ async def send_pdf_callback(query, context):
                 caption="📋 <b>Полное собрание бизнес-процессов Ozon в одном файле</b>\n\n"
                        "Этот файл содержит все бизнес-процессы, касающиеся работы в ПВЗ Ozon.\n"
                        "Используйте поиск в боте для быстрого нахождения нужного процесса.\n"
-		       "После скачивания откройте файл, включите отображение содержания или нажимая на кнопки процесов выберите нужный процесс для изучения или распечатки.\n\n"
+                       "После скачивания откройте файл, включите отображение содержания или нажимая на кнопки процесов выберите нужный процесс для изучения или распечатки.\n\n"
                        "📦 <b>Дополнительная информация:</b>\n"
                        "Если вам нужна дополнительная официальная информация от Ozon, воспользуйтесь кнопкой ниже ↓",
                 parse_mode='HTML',
@@ -385,9 +388,12 @@ async def send_pdf_callback(query, context):
         logger.error(f"Ошибка при отправке PDF в callback: {e}")
         await query.message.reply_text("❌ Произошла ошибка при отправке файла")
 
-async def send_guide_callback(query, context):
+async def send_guide_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка руководства в callback"""
     try:
+        query = update.callback_query
+        await query.answer()
+        
         chat_id = query.message.chat_id
         # Отправляем файл руководства
         with open("РД-1.0 Руководство по чтению БП ООО Технологии упаковки.docx", "rb") as guide_file:
@@ -416,8 +422,11 @@ async def send_guide_callback(query, context):
         logger.error(f"Ошибка при отправке руководства в callback: {e}")
         await query.message.reply_text("❌ Произошла ошибка при отправке руководства")
 
-async def send_video_callback(query, context):
+async def send_video_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка видео в callback"""
+    query = update.callback_query
+    await query.answer()
+    
     video_url = "https://youtu.be/y80ibAgdMMc"
     
     keyboard = [
@@ -447,8 +456,11 @@ async def send_video_callback(query, context):
         disable_web_page_preview=True
     )
 
-async def send_test_callback(query, context):
+async def send_test_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка теста в callback"""
+    query = update.callback_query
+    await query.answer()
+    
     test_url = "https://onlinetestpad.com/pca3izxncofpk"
     video_url = "https://youtu.be/y80ibAgdMMc"
     
@@ -717,7 +729,7 @@ async def show_process_details(update: Update, process_data):
         # Клавиатура для навигации
         keyboard = [
             [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")],
-	    [InlineKeyboardButton("📄 Скачать PDF со всеми процессами", callback_data="get_pdf")],
+            [InlineKeyboardButton("📄 Скачать PDF со всеми процессами", callback_data="get_pdf")],
             [InlineKeyboardButton("📋 Открыть перечень всех процессов", callback_data="list_all")],
             [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")],
             [InlineKeyboardButton("❓ Помощь", callback_data="help")]
@@ -730,9 +742,19 @@ async def show_process_details(update: Update, process_data):
         logger.error(f"Ошибка в show_process_details: {e}")
         await update.message.reply_text("❌ Ошибка при отображении процесса")
 
-async def show_process_callback(query, process_data):
+async def show_process_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает процесс в callback"""
     try:
+        query = update.callback_query
+        await query.answer()
+        
+        process_id = query.data[5:]  # Извлекаем process_id из callback_data
+        process_data = db.get_process_by_id(process_id)
+        
+        if not process_data:
+            await query.message.reply_text(f"❌ Процесс {process_id} не найден.")
+            return
+            
         # Добавим диагностику
         logger.info(f"Данные процесса (callback): {process_data}")
         
@@ -766,7 +788,7 @@ async def show_process_callback(query, process_data):
         keyboard = [
             [InlineKeyboardButton("🔍 Новый поиск процесса", callback_data="new_search")],
             [InlineKeyboardButton("📄 Скачать PDF со всеми процессами", callback_data="get_pdf")],
-	    [InlineKeyboardButton("📋 Открыть перечень всех процессов", callback_data="list_all")],
+            [InlineKeyboardButton("📋 Открыть перечень всех процессов", callback_data="list_all")],
             [InlineKeyboardButton("💡 Отправить предложение", callback_data="send_suggestion")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -787,7 +809,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = query.data
         
         if data == "list_all":
-            await list_command_callback(query)
+            await list_command_callback(update, context)
         
         elif data == "new_search":
             # Вместо редактирования сообщения отправляем новое
@@ -802,33 +824,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         
         elif data == "help":
-            await help_callback(query)
+            await help_callback(update, context)
         
         elif data == "get_pdf":
-            await send_pdf_callback(query, context)
+            await send_pdf_callback(update, context)
         
         elif data == "get_guide":
-            await send_guide_callback(query, context)
+            await send_guide_callback(update, context)
         
         elif data == "bpmn_video":
-            await send_video_callback(query, context)
+            await send_video_callback(update, context)
         
         elif data == "take_test":
-            await send_test_callback(query, context)
+            await send_test_callback(update, context)
         
         elif data == "send_suggestion":
-            await suggestion_callback(query, context)
+            await suggestion_callback(update, context)
         
         elif data == "cancel_suggestion":
-            await cancel_suggestion_callback(query, context)
+            await cancel_suggestion_callback(update, context)
         
         elif data.startswith("show_"):
-            process_id = data[5:]
-            process_data = db.get_process_by_id(process_id)
-            if process_data:
-                await show_process_callback(query, process_data)
-            else:
-                await query.message.reply_text(f"❌ Процесс {process_id} не найден.")
+            await show_process_callback(update, context)
         
         elif data == "ignore":
             # Игнорируем нажатия на заголовки категорий
@@ -837,8 +854,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Ошибка в button_handler: {e}")
 
-async def suggestion_callback(query, context):
+async def suggestion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопки отправки пожелания"""
+    query = update.callback_query
+    await query.answer()
+    
     context.user_data['waiting_for_suggestion'] = True
     
     keyboard = [
@@ -859,8 +879,11 @@ async def suggestion_callback(query, context):
         reply_markup=reply_markup
     )
 
-async def cancel_suggestion_callback(query, context):
+async def cancel_suggestion_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик отмены отправки пожелания"""
+    query = update.callback_query
+    await query.answer()
+    
     if context.user_data.get('waiting_for_suggestion'):
         context.user_data['waiting_for_suggestion'] = False
         
@@ -877,9 +900,12 @@ async def cancel_suggestion_callback(query, context):
             reply_markup=reply_markup
         )
 
-async def list_command_callback(query):
+async def list_command_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает список процессов в callback с интерактивными кнопками"""
     try:
+        query = update.callback_query
+        await query.answer()
+        
         processes = db.get_all_processes()
         
         if not processes:
@@ -1005,8 +1031,11 @@ async def debug_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка диагностики поиска: {e}")
 
-async def help_callback(query):
+async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает справку в callback"""
+    query = update.callback_query
+    await query.answer()
+    
     keyboard = [
         [InlineKeyboardButton("📄 Скачать PDF со всеми процессами", callback_data="get_pdf")],
         [InlineKeyboardButton("📚 Скачать Руководство по чтению процессов", callback_data="get_guide")],
@@ -1096,6 +1125,8 @@ def main():
         print("🔍 Поиск с простым списком активен")
         print("💬 Бот готов к работе!")
         print("🐛 Команды /debug и /debug_search доступны для диагностики")
+        
+        # Запускаем polling
         application.run_polling()
         
     except Exception as e:
