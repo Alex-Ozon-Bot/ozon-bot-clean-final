@@ -1198,4 +1198,7 @@ def main():
             time.sleep(wait_time)
     
     print("❌ Превышено максимальное количество попыток запуска")
-        main()
+
+# Запуск бота
+if __name__ == "__main__":
+    main()
