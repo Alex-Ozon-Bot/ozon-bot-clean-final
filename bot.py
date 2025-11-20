@@ -672,15 +672,16 @@ async def show_simple_results(update: Update, query: str, results):
         
         # Простой пронумерованный список процессов
         for i, result in enumerate(results, 1):
-            # Исправленное извлечение данных из результата
+            # ПРАВИЛЬНОЕ извлечение данных из результата
             # Формат результата: (process_id, process_name, description, keywords)
             if isinstance(result, (list, tuple)) and len(result) >= 2:
                 # Правильные индексы для данных из базы
-                process_id = result[0]  # process_id
-                process_name = result[1]  # process_name
+                process_id = result[0]  # process_id - первый элемент
+                process_name = result[1]  # process_name - второй элемент
             else:
-                # Если формат неправильный, попробуем получить данные по-другому
+                # Если формат неправильный, используем fallback
                 try:
+                    # Пробуем получить доступ к атрибутам, если это объект Row
                     process_id = getattr(result, 'process_id', 'Неизвестно')
                     process_name = getattr(result, 'process_name', 'Неизвестно')
                 except:
@@ -694,9 +695,9 @@ async def show_simple_results(update: Update, query: str, results):
         # Добавляем кнопки для быстрого доступа к первым процессам
         keyboard = []
         for i, result in enumerate(results[:5], 1):
-            # Исправленное извлечение process_id для callback_data
+            # ПРАВИЛЬНОЕ извлечение process_id для callback_data
             if isinstance(result, (list, tuple)) and len(result) >= 1:
-                process_id = result[0]  # process_id
+                process_id = result[0]  # process_id - первый элемент
                 # Получаем название процесса
                 process_name = result[1] if len(result) > 1 else 'Процесс'
                 # Укорачиваем текст кнопки если слишком длинный
@@ -738,13 +739,13 @@ async def show_process_details(update: Update, process_data):
         # Добавим диагностику
         logger.info(f"Данные процесса: {process_data}")
         
-        # Формат данных из SQLite: (id, process_id, process_name, description, keywords)
-        if isinstance(process_data, (list, tuple)) and len(process_data) >= 5:
-            # Правильный формат: (id, process_id, process_name, description, keywords)
-            process_id = process_data[1]  # process_id
-            process_name = process_data[2]  # process_name
-            description = process_data[3]  # description
-            keywords = process_data[4] if len(process_data) > 4 else "Ключевые слова недоступны"
+        # ПРАВИЛЬНЫЙ формат данных из SQLite: (process_id, process_name, description, keywords)
+        if isinstance(process_data, (list, tuple)) and len(process_data) >= 4:
+            # Правильный формат: (process_id, process_name, description, keywords)
+            process_id = process_data[0]  # process_id - первый элемент
+            process_name = process_data[1]  # process_name - второй элемент
+            description = process_data[2]  # description - третий элемент
+            keywords = process_data[3] if len(process_data) > 3 else "Ключевые слова недоступны"
             
             # Проверяем описание
             if not description:
@@ -797,13 +798,13 @@ async def show_process_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # Добавим диагностику
         logger.info(f"Данные процесса (callback): {process_data}")
         
-        # Формат данных из SQLite: (id, process_id, process_name, description, keywords)
-        if isinstance(process_data, (list, tuple)) and len(process_data) >= 5:
-            # Правильный формат: (id, process_id, process_name, description, keywords)
-            process_id = process_data[1]  # process_id
-            process_name = process_data[2]  # process_name
-            description = process_data[3]  # description
-            keywords = process_data[4] if len(process_data) > 4 else "Ключевые слова недоступны"
+        # ПРАВИЛЬНЫЙ формат данных из SQLite: (process_id, process_name, description, keywords)
+        if isinstance(process_data, (list, tuple)) and len(process_data) >= 4:
+            # Правильный формат: (process_id, process_name, description, keywords)
+            process_id = process_data[0]  # process_id - первый элемент
+            process_name = process_data[1]  # process_name - второй элемент
+            description = process_data[2]  # description - третий элемент
+            keywords = process_data[3] if len(process_data) > 3 else "Ключевые слова недоступны"
             
             # Проверяем описание
             if not description:
