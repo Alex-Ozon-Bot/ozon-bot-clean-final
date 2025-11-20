@@ -6,6 +6,25 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from config import BOT_TOKEN
 from database import db
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is healthy')
+    
+    def log_message(self, format, *args):
+        return
+
+def start_health_server():
+    port = int(os.environ.get('PORT', 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    print(f"✅ Сервер здоровья запущен на порту {port}")
+    server.serve_forever()
 
 # Настройка логирования
 logging.basicConfig(
@@ -1094,6 +1113,10 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Запуск бота"""
     try:
+        # Запускаем сервер здоровья в отдельном потоке
+        health_thread = threading.Thread(target=start_health_server, daemon=True)
+        health_thread.start()
+        
         # Создаем Application
         application = Application.builder().token(BOT_TOKEN).build()
         
