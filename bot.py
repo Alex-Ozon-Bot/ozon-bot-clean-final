@@ -1159,18 +1159,41 @@ def main():
         
         # Запускаем бота с обработкой конфликтов
         print("🤖 Бот запускается...")
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
         
-    except telegram.error.Conflict as e:
-        print(f"❌ Конфликт: {e}")
-        print("🔄 Перезапуск через 10 секунд...")
-        time.sleep(10)
-        main()
+        # Используем флаг для контроля работы бота
+        running = True
+        
+        def signal_handler(signum, frame):
+            nonlocal running
+            print(f"📝 Получен сигнал {signum}, завершаем работу...")
+            running = False
+        
+        # Регистрируем обработчики сигналов
+        import signal
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        # Запускаем бота с периодической проверкой флага
+        while running:
+            try:
+                application.run_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True,
+                    close_loop=False
+                )
+            except telegram.error.Conflict as e:
+                print(f"❌ Конфликт: {e}")
+                print("🔄 Перезапуск через 10 секунд...")
+                time.sleep(10)
+            except Exception as e:
+                logger.error(f"Ошибка запуска бота: {e}")
+                print("🔄 Перезапуск через 30 секунд...")
+                time.sleep(30)
+        
+        print("👋 Бот завершает работу...")
+        
     except Exception as e:
-        logger.error(f"Ошибка запуска бота: {e}")
-        print("🔄 Перезапуск через 30 секунд...")
-        time.sleep(30)
+        logger.error(f"Критическая ошибка в main: {e}")
+        print("🔄 Перезапуск через 60 секунд...")
+        time.sleep(60)
         main()
