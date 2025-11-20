@@ -92,8 +92,8 @@ class Database:
         """Нормализует текст: заменяет ё на е и приводит к нижнему регистру"""
         if not text:
             return ""
-        return text.lower().replace('ё', 'е')
-    
+        return text.lower().replace('ё', 'e')
+
     def _get_word_stems(self, word: str) -> List[str]:
         """Возвращает возможные основы слова для поиска с учетом нормализации е/ё"""
         word = self._normalize_text(word.strip())
@@ -224,55 +224,55 @@ class Database:
         return relevance
 
     def search_processes(self, query: str) -> List[Tuple]:
-    """Улучшенный поиск процессов с точной релевантностью"""
-    cursor = self.conn.cursor()
-    
-    # Разбиваем запрос на слова
-    words = [word.strip() for word in query.split() if word.strip()]
-    
-    if not words:
-        return []
-    
-    # Получаем все процессы для поиска
-    cursor.execute('SELECT process_id, process_name, description, keywords FROM processes')
-    all_processes = cursor.fetchall()
-    
-    print(f"🔍 Поиск: '{query}'")  # Отладочная информация
-    print(f"📊 Всего процессов в базе: {len(all_processes)}")  # Отладочная информация
-    
-    # Создаем стеммы для всех слов запроса
-    all_stems = []
-    for word in words:
-        stems = self._get_word_stems(word)
-        all_stems.extend(stems)
-    
-    # Убираем дубликаты стемм
-    all_stems = list(set(all_stems))
-    
-    # Ищем процессы и вычисляем релевантность
-    results_with_relevance = []
-    for process_data in all_processes:
-        relevance = self._calculate_relevance(process_data, all_stems, query)
-        if relevance > 0:
-            results_with_relevance.append((process_data, relevance))
-    
-    # Сортируем по релевантности (по убыванию)
-    results_with_relevance.sort(key=lambda x: x[1], reverse=True)
-    
-    # Берем только топ-5 результатов
-    top_results = results_with_relevance[:5]
-    
-    # Фильтруем только действительно релевантные процессы (релевантность > 10)
-    final_results = [process for process, relevance in top_results if relevance > 10]
-    
-    print(f"✅ Найдено релевантных процессов: {len(final_results)}")  # Отладочная информация
-    if final_results:
-        print("📋 Топ результаты:")
-        for i, (process, relevance) in enumerate(top_results[:3], 1):
-            print(f"   {i}. {process[0]} - {process[1]} (релевантность: {relevance})")
-    
-    cursor.close()
-    return final_results
+        """Улучшенный поиск процессов с точной релевантностью"""
+        cursor = self.conn.cursor()
+        
+        # Разбиваем запрос на слова
+        words = [word.strip() for word in query.split() if word.strip()]
+        
+        if not words:
+            return []
+        
+        # Получаем все процессы для поиска
+        cursor.execute('SELECT process_id, process_name, description, keywords FROM processes')
+        all_processes = cursor.fetchall()
+        
+        print(f"🔍 Поиск: '{query}'")  # Отладочная информация
+        print(f"📊 Всего процессов в базе: {len(all_processes)}")  # Отладочная информация
+        
+        # Создаем стеммы для всех слов запроса
+        all_stems = []
+        for word in words:
+            stems = self._get_word_stems(word)
+            all_stems.extend(stems)
+        
+        # Убираем дубликаты стемм
+        all_stems = list(set(all_stems))
+        
+        # Ищем процессы и вычисляем релевантность
+        results_with_relevance = []
+        for process_data in all_processes:
+            relevance = self._calculate_relevance(process_data, all_stems, query)
+            if relevance > 0:
+                results_with_relevance.append((process_data, relevance))
+        
+        # Сортируем по релевантности (по убыванию)
+        results_with_relevance.sort(key=lambda x: x[1], reverse=True)
+        
+        # Берем только топ-5 результатов
+        top_results = results_with_relevance[:5]
+        
+        # Фильтруем только действительно релевантные процессы (релевантность > 10)
+        final_results = [process for process, relevance in top_results if relevance > 10]
+        
+        print(f"✅ Найдено релевантных процессов: {len(final_results)}")  # Отладочная информация
+        if final_results:
+            print("📋 Топ результаты:")
+            for i, (process, relevance) in enumerate(top_results[:3], 1):
+                print(f"   {i}. {process[0]} - {process[1]} (релевантность: {relevance})")
+        
+        cursor.close()
+        return final_results
     
     def get_all_processes(self) -> List[Tuple]:
         """Возвращает все процессы в формате (process_id, process_name)"""
