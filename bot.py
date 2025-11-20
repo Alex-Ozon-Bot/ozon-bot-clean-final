@@ -23,10 +23,17 @@ class HealthHandler(BaseHTTPRequestHandler):
         return
 
 def start_health_server():
-    port = int(os.environ.get('PORT', 8080))
-    server = HTTPServer(('0.0.0.0', port), HealthHandler)
-    print(f"✅ Сервер здоровья запущен на порту {port}")
-    server.serve_forever()
+    """Запуск HTTP сервера для проверки здоровья"""
+    try:
+        port = int(os.environ.get('PORT', 8080))
+        server = HTTPServer(('0.0.0.0', port), HealthHandler)
+        print(f"✅ Сервер здоровья запущен на порту {port}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Ошибка запуска health server: {e}")
+        # Перезапуск через 5 секунд при ошибке
+        time.sleep(5)
+        start_health_server()
 
 # Настройка логирования
 logging.basicConfig(
@@ -1133,67 +1140,62 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Запуск бота"""
-    try:
-        # Запускаем health server в отдельном потоке
-        health_thread = threading.Thread(target=start_health_server, daemon=True)
-        health_thread.start()
-        
-        # Создаем Application с обработкой конфликтов
-        application = Application.builder().token(BOT_TOKEN).build()
-        
-        # Добавляем обработчики
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("list", list_command))
-        application.add_handler(CommandHandler("pdf", send_processes_pdf))
-        application.add_handler(CommandHandler("guide", send_guide))
-        application.add_handler(CommandHandler("video", send_bpmn_video))
-        application.add_handler(CommandHandler("test", send_test))
-        application.add_handler(CommandHandler("suggestion", suggestion_command))
-        application.add_handler(CommandHandler("viewsuggestions", view_suggestions_command))
-        application.add_handler(CommandHandler("debug", debug_processes))
-        application.add_handler(CommandHandler("debug_search", debug_search))
-        application.add_handler(CommandHandler("check", check_process))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        application.add_handler(CallbackQueryHandler(button_handler))
-        
-        # Запускаем бота с обработкой конфликтов
-        print("🤖 Бот запускается...")
-        
-        # Используем флаг для контроля работы бота
-        running = True
-        
-        def signal_handler(signum, frame):
-            nonlocal running
-            print(f"📝 Получен сигнал {signum}, завершаем работу...")
-            running = False
-        
-        # Регистрируем обработчики сигналов
-        import signal
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        # Запускаем бота с периодической проверкой флага
-        while running:
-            try:
-                application.run_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True,
-                    close_loop=False
-                )
-            except telegram.error.Conflict as e:
-                print(f"❌ Конфликт: {e}")
-                print("🔄 Перезапуск через 10 секунд...")
-                time.sleep(10)
-            except Exception as e:
-                logger.error(f"Ошибка запуска бота: {e}")
-                print("🔄 Перезапуск через 30 секунд...")
-                time.sleep(30)
-        
-        print("👋 Бот завершает работу...")
-        
-    except Exception as e:
-        logger.error(f"Критическая ошибка в main: {e}")
-        print("🔄 Перезапуск через 60 секунд...")
-        time.sleep(60)
+    max_retries = 5
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            print(f"🔄 Попытка запуска {retry_count + 1}/{max_retries}")
+            
+            # Запускаем health server в отдельном потоке
+            health_thread = threading.Thread(target=start_health_server, daemon=True)
+            health_thread.start()
+            print("✅ Health server запущен")
+            
+            # Даем время health server запуститься
+            time.sleep(2)
+            
+            # Создаем Application
+            application = Application.builder().token(BOT_TOKEN).build()
+            print("✅ Application создано")
+            
+            # Добавляем обработчики
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CommandHandler("help", help_command))
+            application.add_handler(CommandHandler("list", list_command))
+            application.add_handler(CommandHandler("pdf", send_processes_pdf))
+            application.add_handler(CommandHandler("guide", send_guide))
+            application.add_handler(CommandHandler("video", send_bpmn_video))
+            application.add_handler(CommandHandler("test", send_test))
+            application.add_handler(CommandHandler("suggestion", suggestion_command))
+            application.add_handler(CommandHandler("viewsuggestions", view_suggestions_command))
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            application.add_handler(CallbackQueryHandler(button_handler))
+            
+            print("✅ Обработчики добавлены")
+            print("🤖 Бот запускается...")
+            
+            # Запускаем бота
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                poll_interval=3,
+                timeout=20
+            )
+            
+        except telegram.error.Conflict as e:
+            print(f"❌ Конфликт: {e}")
+            retry_count += 1
+            wait_time = 10 * retry_count
+            print(f"🔄 Перезапуск через {wait_time} секунд...")
+            time.sleep(wait_time)
+            
+        except Exception as e:
+            print(f"❌ Ошибка запуска бота: {e}")
+            retry_count += 1
+            wait_time = 30 * retry_count
+            print(f"🔄 Перезапуск через {wait_time} секунд...")
+            time.sleep(wait_time)
+    
+    print("❌ Превышено максимальное количество попыток запуска")
         main()
