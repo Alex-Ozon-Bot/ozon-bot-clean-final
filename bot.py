@@ -1131,11 +1131,7 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Запуск бота"""
     try:
-        # Запускаем сервер здоровья в отдельном потоке
-        health_thread = threading.Thread(target=start_health_server, daemon=True)
-        health_thread.start()
-        
-        # Создаем Application
+        # Создаем Application с обработкой конфликтов
         application = Application.builder().token(BOT_TOKEN).build()
         
         # Добавляем обработчики
@@ -1154,30 +1150,21 @@ def main():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         application.add_handler(CallbackQueryHandler(button_handler))
         
-        # Запускаем бота
+        # Запускаем бота с обработкой конфликтов
         print("🤖 Бот запускается...")
-        print("📊 База данных подключена")
-        print("📄 PDF-файл с процессами доступен")
-        print("📚 Руководство по BPMN доступно")
-        print("🎥 Обучающий ролик по BPMN добавлен")
-        print("🧪 Тест по BPMN добавлен")
-        print("💡 Система пожеланий активирована")
-        print("🔔 Уведомления администратора настроены")
-        print("🔍 Поиск с простым списком активен")
-        print("💬 Бот готов к работе!")
-        print("🐛 Команды /debug и /debug_search доступны для диагностики")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,  # Важно: игнорирует старые updates при запуске
+            close_loop=False
+        )
         
-        # Запускаем polling с использованием asyncio
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Если loop уже запущен (например, в Jupyter)
-            application.run_polling()
-        else:
-            # Стандартный запуск
-            application.run_polling()
-        
+    except telegram.error.Conflict as e:
+        print(f"❌ Конфликт: {e}")
+        print("🔄 Перезапуск через 10 секунд...")
+        time.sleep(10)
+        main()  # Рекурсивный перезапуск
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
-
-if __name__ == '__main__':
-    main()
+        print("🔄 Перезапуск через 30 секунд...")
+        time.sleep(30)
+        main()
