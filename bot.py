@@ -1126,8 +1126,14 @@ def main():
         print("💬 Бот готов к работе!")
         print("🐛 Команды /debug и /debug_search доступны для диагностики")
         
-        # Запускаем polling
-        application.run_polling()
+        # Запускаем polling с использованием asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Если loop уже запущен (например, в Jupyter)
+            application.run_polling()
+        else:
+            # Стандартный запуск
+            application.run_polling()
         
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")

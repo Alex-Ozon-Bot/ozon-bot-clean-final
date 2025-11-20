@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import re
+import json
 from typing import List, Tuple, Any, Optional
 from datetime import datetime
 
@@ -8,7 +9,8 @@ class Database:
     def __init__(self, db_file: str = 'data/processes.db'):
         self.db_file = db_file
         os.makedirs(os.path.dirname(db_file), exist_ok=True)
-        self.conn = sqlite3.connect(db_file)
+        self.conn = sqlite3.connect(db_file, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row  # Для доступа к полям по имени
         self.create_tables()
         self.populate_data()
     
@@ -41,12 +43,11 @@ class Database:
         
         self.conn.commit()
         cursor.close()
-        print("✅ Tables created successfully")
+        print("✅ Таблицы созданы успешно")
     
     def populate_data(self):
         """Заполняет базу данных данными из JSON файла"""
         try:
-            import json
             # Проверяем существование файла
             json_path = 'data/processes.json'
             
@@ -82,10 +83,10 @@ class Database:
             self.conn.commit()
             cursor.close()
             
-            print(f"✅ Database populated. Added {len(processes)} processes")
+            print(f"✅ База данных заполнена. Добавлено {len(processes)} процессов")
             
         except Exception as e:
-            print(f"❌ Error populating database: {e}")
+            print(f"❌ Ошибка при заполнении базы данных: {e}")
 
     def _normalize_text(self, text: str) -> str:
         """Нормализует текст: заменяет ё на е и приводит к нижнему регистру"""
