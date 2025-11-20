@@ -11,6 +11,28 @@ from database import db
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+import subprocess
+import sys
+
+def kill_previous_python_processes():
+    """Завершает предыдущие процессы Python на Windows"""
+    try:
+        # Команда для PowerShell
+        command = [
+            "powershell", 
+            "-Command", 
+            "Get-Process python | Where-Object { $_.MainWindowTitle -like '*bot*' -or $_.ProcessName -eq 'python' } | Stop-Process -Force"
+        ]
+        
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        
+        if result.returncode == 0:
+            print("✅ Предыдущие процессы Python завершены")
+        else:
+            print("ℹ️ Не найдено процессов для завершения")
+            
+    except Exception as e:
+        print(f"⚠️ Не удалось завершить процессы: {e}")
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -1139,8 +1161,11 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка проверки: {e}")
 
 def main():
-    """Запуск бота"""
-    max_retries = 5
+    """Запуск бота с улучшенной обработкой конфликтов"""
+    # Завершаем предыдущие процессы перед запуском
+    kill_previous_python_processes()
+    
+    max_retries = 3
     retry_count = 0
     
     while retry_count < max_retries:
@@ -1153,13 +1178,13 @@ def main():
             print("✅ Health server запущен")
             
             # Даем время health server запуститься
-            time.sleep(2)
+            time.sleep(3)
             
-            # Создаем Application с явным указанием бот-инстанса
+            # Создаем Application
             application = (
                 Application.builder()
                 .token(BOT_TOKEN)
-                .concurrent_updates(True)  # Разрешаем параллельные обновления
+                .concurrent_updates(True)
                 .build()
             )
             print("✅ Application создано")
@@ -1180,32 +1205,38 @@ def main():
             print("✅ Обработчики добавлены")
             print("🤖 Бот запускается...")
             
-            # Запускаем бота с принудительным завершением предыдущих сессий
+            # Запускаем бота с улучшенными параметрами
             application.run_polling(
                 allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,  # Игнорируем старые сообщения
-                close_loop=False,  # Не закрываем цикл при ошибке
-                stop_signals=[],   # Отключаем обработку сигналов остановки
+                drop_pending_updates=True,
+                close_loop=False,
+                pool_timeout=10,
+                connect_timeout=10,
+                read_timeout=10,
+                write_timeout=10
             )
             
         except telegram.error.Conflict as e:
             print(f"❌ Конфликт: {e}")
             print("🔄 Принудительное завершение предыдущей сессии...")
             
-            # Ждем подольше при конфликте
+            # Снова пытаемся завершить процессы
+            kill_previous_python_processes()
+            
             retry_count += 1
-            wait_time = 30 * retry_count
+            wait_time = 10 * retry_count
             print(f"🔄 Перезапуск через {wait_time} секунд...")
             time.sleep(wait_time)
             
         except Exception as e:
             print(f"❌ Ошибка запуска бота: {e}")
             retry_count += 1
-            wait_time = 20 * retry_count
+            wait_time = 10 * retry_count
             print(f"🔄 Перезапуск через {wait_time} секунд...")
             time.sleep(wait_time)
     
     print("❌ Превышено максимальное количество попыток запуска")
+    print("💡 Проверьте, нет ли других запущенных экземпляров бота")
 
 # Запуск бота
 if __name__ == "__main__":
