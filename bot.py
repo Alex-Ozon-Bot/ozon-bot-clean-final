@@ -670,13 +670,20 @@ async def show_simple_results(update: Update, query: str, results):
         
         # Простой пронумерованный список процессов
         for i, result in enumerate(results, 1):
+            # Исправленное извлечение данных из результата
             # Формат результата: (process_id, process_name, description, keywords)
             if isinstance(result, (list, tuple)) and len(result) >= 2:
-                process_id = result[0]  # Первый элемент - process_id
-                process_name = result[1]  # Второй элемент - process_name
+                # Правильные индексы для данных из базы
+                process_id = result[0]  # process_id
+                process_name = result[1]  # process_name
             else:
-                process_id = "Неизвестно"
-                process_name = "Неизвестно"
+                # Если формат неправильный, попробуем получить данные по-другому
+                try:
+                    process_id = getattr(result, 'process_id', 'Неизвестно')
+                    process_name = getattr(result, 'process_name', 'Неизвестно')
+                except:
+                    process_id = "Неизвестно"
+                    process_name = "Неизвестно"
             
             text += f"<b>{i}.</b> <code>{process_id}</code> - {process_name}\n"
         
@@ -685,10 +692,18 @@ async def show_simple_results(update: Update, query: str, results):
         # Добавляем кнопки для быстрого доступа к первым процессам
         keyboard = []
         for i, result in enumerate(results[:5], 1):
+            # Исправленное извлечение process_id для callback_data
             if isinstance(result, (list, tuple)) and len(result) >= 1:
-                process_id = result[0]
-                # Используем только process_id для callback_data
-                button_text = f"{i}. {process_id} - {result[1] if len(result) > 1 else 'Процесс'}"
+                process_id = result[0]  # process_id
+                # Получаем название процесса
+                process_name = result[1] if len(result) > 1 else 'Процесс'
+                # Укорачиваем текст кнопки если слишком длинный
+                button_text = f"{i}. {process_id}"
+                if len(process_name) > 20:
+                    button_text += f" - {process_name[:20]}..."
+                else:
+                    button_text += f" - {process_name}"
+                
                 keyboard.append([InlineKeyboardButton(button_text, callback_data=f"show_{process_id}")])
         
         keyboard.append([InlineKeyboardButton("📄 Скачать PDF со всеми процессами", callback_data="get_pdf")])
@@ -702,13 +717,16 @@ async def show_simple_results(update: Update, query: str, results):
         
     except Exception as e:
         logger.error(f"Ошибка в show_simple_results: {e}")
-        # Упрощенный fallback
+        # Упрощенный fallback с диагностикой
         simple_text = f"🔍 Найдено процессов: {len(results)}\n\n"
         for i, result in enumerate(results[:10], 1):
-            if isinstance(result, (list, tuple)) and len(result) >= 2:
-                simple_text += f"{i}. {result[0]} - {result[1]}\n"
-            else:
-                simple_text += f"{i}. {result}\n"
+            try:
+                if isinstance(result, (list, tuple)) and len(result) >= 2:
+                    simple_text += f"{i}. {result[0]} - {result[1]}\n"
+                else:
+                    simple_text += f"{i}. {str(result)[:100]}\n"
+            except:
+                simple_text += f"{i}. Ошибка отображения\n"
         
         await update.message.reply_text(simple_text, parse_mode='HTML')
 
