@@ -1161,13 +1161,8 @@ def main():
         print("🤖 Бот запускается...")
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            close_loop=False
+            drop_pending_updates=True
         )
-        
-        # Бесконечный цикл чтобы приложение не завершалось
-        while True:
-            time.sleep(3600)  # Спим 1 час
         
     except telegram.error.Conflict as e:
         print(f"❌ Конфликт: {e}")
