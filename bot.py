@@ -1134,6 +1134,10 @@ async def check_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Запуск бота"""
     try:
+        # Запускаем health server в отдельном потоке
+        health_thread = threading.Thread(target=start_health_server, daemon=True)
+        health_thread.start()
+        
         # Создаем Application с обработкой конфликтов
         application = Application.builder().token(BOT_TOKEN).build()
         
@@ -1157,7 +1161,7 @@ def main():
         print("🤖 Бот запускается...")
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,  # Важно: игнорирует старые updates при запуске
+            drop_pending_updates=True,
             close_loop=False
         )
         
